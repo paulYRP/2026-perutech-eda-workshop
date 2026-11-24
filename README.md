@@ -15,7 +15,7 @@ Pre-Workshop Instructions for the `R` PeruTech Workshop 2026.
 This document provides instructions for setting up R and RStudio
 before the workshop. Participants can choose between installing
 R and RStudio on their computer or using an online environment
-through their web browser.
+through the web.
 
 # Step 1: Set up your R environment
 
@@ -26,7 +26,7 @@ through their web browser.
 1. Go to the Comprehensive R Archive Network (CRAN):
    https://cran.r-project.org/
 2. Choose your operating system (Windows, macOS, or Linux).
-3. Download and install the latest version of R.
+3. Download and install a version of R (Recommended > 4.4).
 
 ### Install RStudio
 
