@@ -71,21 +71,6 @@ data visualisation techniques.
 - [Tutorial 1: Using R](https://shiny.qutmaths.net/LearnR/Tutorial1_UsingR/#section-installing-r-and-rstudio)
 - [Tutorial 2: Data Visualisation](https://shiny.qutmaths.net/LearnR/Tutorial4_Visualisation/#section-introduction)
 
-# Step 4: Workshop preparation (Optional but recommended)
-
-Install the required R packages and execute the scripts provided
-in this repository before the workshop to avoid delays during
-the practical activities.
-
-R packages can be installed directly from the RStudio Console
-using the following command:
-
-```r
-install.packages("package_name")
-```
-
-Replace `package_name` with the name of the required package.
-
 ## Contact
 
 If you encounter any installation or configuration issues,
