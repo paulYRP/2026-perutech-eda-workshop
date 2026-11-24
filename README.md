@@ -1,7 +1,7 @@
 # Exploratory Data Analysis using R, PeruTech AU
 --------------
 
-- [**Table of contents**](https://github.com/paulYRP/2026-perutech-eda-workshop/wiki)
+- [**Table of contents**](https://github.com/paulYRP/2026-perutech-eda-workshop/wiki/Table-of-Contents)
 
 ## Overview
 
