@@ -1,4 +1,4 @@
-# Exploratory Data Analysis using R Workshop, PeruTech AU
+# Exploratory Data Analysis using R, PeruTech AU
 --------------
 
 - [**DNA Methylation Tutorial**](https://paulYRP.github.io/2025-cpgpneurogenomics-workshop/tutorial.html)
