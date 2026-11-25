@@ -1,7 +1,7 @@
 # Exploratory Data Analysis using R, PeruTech AU
 --------------
 
-- [**Table of contents**](https://github.com/paulYRP/2026-perutech-eda-workshop/wiki/Table-of-Contents)
+- [**Workshop Contents**](https://github.com/paulYRP/2026-perutech-eda-workshop/wiki/Table-of-Contents)
 
 ## Overview
 
@@ -26,12 +26,13 @@ through the web.
 
 ## Option A: RStudio Desktop (Recommended)
 
-### Install R
+### Install R 
 
 1. Go to the Comprehensive R Archive Network (CRAN):
    https://cran.r-project.org/
 2. Choose your operating system (Windows, macOS, or Linux).
 3. Download and install a version of R (Recommended > 4.4).
+4. Estimated time: ~5–10 minutes.
 
 ### Install RStudio
 
@@ -40,6 +41,7 @@ through the web.
 2. Download the free desktop version and follow the installation
    instructions.
 3. Open RStudio once the installation is complete.
+4. Estimated time: ~5–10 minutes.
 
 ## Option B: RStudio Online (Posit Cloud)
 
@@ -53,6 +55,7 @@ use RStudio directly through your web browser.
 4. Once the environment opens, you can use the RStudio Console
    and execute R scripts without installing additional software
    on your computer.
+5. Estimated time: ~2-5 minutes.
 
 # Step 2: Test your R environment
 
