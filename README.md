@@ -10,6 +10,11 @@ Pre-Workshop Instructions for the `R` PeruTech Workshop 2026.
 **Institution:** Queensland University of Technology  
 **Author:** MSc/RA Paul Ruiz
 
+## Requirements
+
+- **Laptop:** Please bring your own laptop. Ensure you have completed the R setup below before attending the session.
+- **Dataset (Optional):** You are welcome to bring your own dataset to explore during the workshop. Sample datasets will also be provided.
+
 ## About this document
 
 This document provides instructions for setting up R and RStudio
