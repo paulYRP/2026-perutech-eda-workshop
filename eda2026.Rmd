@@ -1,0 +1,642 @@
+---
+title: "Exploratory Data Analysis"
+author: "paul.ruizpinto@qut.edu.au"
+date: "`r Sys.Date()`"
+knit: |-
+  (function(input, ...) {
+    rmarkdown::render(
+      input = input,
+      output_dir = file.path(dirname(normalizePath(input)), "render")
+    )
+  })
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: cosmo
+    highlight: tango
+    number_sections: true
+    self_contained: true
+    df_print: paged
+    # code_folding: hide
+    includes:
+      in_header: render/style/format.Rhtml
+---
+
+# Introduction
+
+This workshop uses exploratory data analysis (EDA) to understand the structure, distributions, and relationships in birth records. We will inspect the data, investigate unusual observations, and use numerical summaries with graphics to answer questions. Brief examples of confidence intervals, hypothesis testing, and linear regression follow the exploration.
+
+The input is OpenIntro's `births14` dataset, a documented random sample of 1,000 records from the US 2014 natality dataset. Each row represents one birth.
+
+```{r setup, include=FALSE}
+# Configure chunk output
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, cache = FALSE,
+                     fig.width = 7, fig.height = 4.5, fig.align = "center")
+options(digits = 4)
+```
+
+# Why Do We Need to Analyse Data?
+
+Pearson (2018, Section 1.1) distinguishes three purposes for analysis: 
+
+- Understanding what has happened, 
+- predicting an outcome, and 
+- informing decisions. 
+
+Our main purpose is understanding the recorded births. 
+
+```{r}
+# Read the birth records from OpenIntro
+data <- read.csv(file.path("https://www.openintro.org", "data", "csv", "births14.csv"))
+dim(data)
+colnames(data)
+
+```
+
+The questions guiding the exploration are:
+
+- What `birth weights` and `pregnancy durations` occur in these records?
+- How does `birth weight` vary with `pregnancy duration` and recorded `smoking status`?
+- Which values need `further investigation`, and what information would resolve them?
+
+# A General View
+
+## Data source
+
+OpenIntro documents the source, sampling, and variable definitions on its [births14 page](https://openintrostat.github.io/openintro/reference/births14.html). The source population is the birth records represented in the 2014 natality file. 
+
+```{r}
+# View the birth records from OpenIntro
+data
+```
+
+The dataset contains `r nrow(data)` records and `r ncol(data)` source variables. The source records birth weight (`weight`) and maternal weight gain (`gained`) in pounds. Convert both to kilograms using $1\text{ lb} = 0.45359237\text{ kg}$ and use `weightKG` and `gainedKG` throughout the analysis. 
+
+The other main variables are `weeks` (pregnancy duration in weeks), `habit` (maternal smoking status), and the released `lowbirthweight` classification. 
+
+```{r}
+# Convert birth weight and maternal weight gain to kilograms
+data <- data |>
+  dplyr::mutate(weightKG = weight * 0.45359237, .before = weight) |>
+  dplyr::mutate(gainedKG = gained * 0.45359237, .before = gained)
+data
+
+```
+
+# Graphics in R
+
+An exploratory graphic helps us find patterns and formulate questions. An explanatory graphic communicates a selected finding with enough context to interpret it.
+
+**Question.** How many records are classified as full term or premature?
+
+```{r}
+# Count the released prematurity categories
+births <- table(data$premie)
+births
+
+```
+
+```{r}
+# Plot the frequency of each prematurity category
+barplot(births, 
+        names.arg = c("Full term", "Premature"),
+        col = c("steelblue", "darkorange"),
+        xlab = "Recorded classification", 
+        ylab = "Number of births")
+
+```
+
+**Interpretation.** Full-term births account for `r unname(births["full term"])` records and premature births for `r unname(births["premie"])`. These unequal group sizes will matter when comparing counts across groups.
+
+```{r}
+# Express prematurity counts as percentages of classified births
+100 * prop.table(births)
+
+```
+
+# Exploratory Data Analysis
+
+Pearson (2018, Chapter 3) organises EDA around four connected ideas:
+
+| Concept | Use in this workshop |
+|:--|:--|
+| Revelation | Use plots to reveal distribution shapes, groups, and unusual observations |
+| Residuals | Examine observed values minus fitted values to identify structure a model misses |
+| Re-expression | Express birth weight and maternal weight gain in kilograms while retaining the source values in pounds |
+| Resistance | Compare mean and standard deviation with median and interquartile range when investigating extremes |
+
+# Exploring a Dataset
+
+## General characteristics
+
+**Question.** What information is present, and how is it stored?
+
+Inspect storage types and the number of distinct recorded values before selecting summaries or changing variable types (Pearson, 2018, Section 3.1). Exclude `NA` when counting distinct observed values, then examine missingness separately.
+
+```{r}
+# Inspect storage types and distinct observed values
+structure <- data.frame(
+  type = sapply(data, class),
+  distinct = sapply(data, function(values) length(unique(na.omit(values))))
+)
+structure
+```
+
+The character columns contain category labels. Numerical storage alone also needs interpretation: `visits` is a count, `weeks` is recorded in whole weeks, and the converted measurements retain their full numerical precision. Conversion changes units, not the precision of the original measurements.
+
+```{r}
+# Inspect the recorded labels and their frequencies
+categories <- names(data)[sapply(data, is.character)]
+lapply(data[categories], table, useNA = "ifany")
+
+```
+
+## Missing values
+
+```{r}
+# Count missing values by variable and affected records
+missing <- colSums(is.na(data))
+missing
+sum(!complete.cases(data))
+
+```
+
+There are `r sum(!complete.cases(data))` records with at least one missing value. Counts by variable overlap because one record can lack several values. Birth weight and pregnancy duration are complete; smoking status is missing for `r missing["habit"]` records.
+
+## Variable coding
+
+Add the original CSV row position as a stable record identifier before selecting records for any comparison.
+
+```{r}
+# Identify the original CSV row for each birth record
+data <- data |>
+  dplyr::mutate(record = seq_len(nrow(data)), .before = 1)
+colnames(data)
+
+```
+
+Use unordered factors for the inspected category labels. The level order controls displays and reference categories; it does not declare a ranking. Keep the released labels and classifications, including the broad `whitemom` categories, without reconstructing their definitions from other columns.
+
+```{r}
+str(data)
+```
+
+
+```{r}
+# Encode the inspected category labels as unordered factors
+data$mature <- factor(data$mature)
+data$premie <- factor(data$premie)
+data$lowbirthweight <- factor(data$lowbirthweight)
+data$sex <- factor(data$sex)
+data$habit <- factor(data$habit)
+data$marital <- factor(data$marital)
+data$whitemom <- factor(data$whitemom)
+
+data
+```
+
+**Exercise.** How many records can contribute to an analysis of birth weight and pregnancy duration? How many have both smoking status and birth-weight classification?
+
+**Worked answer.** The first relationship can use all `r nrow(data)` records. The second can use `r sum(complete.cases(data[c("habit", "lowbirthweight")] ))` records. The denominator depends on the variables required.
+
+```{r}
+# Count complete records for the two planned relationships
+sum(complete.cases(data[c("weightKG", "weeks")]))
+sum(complete.cases(data[c("habit", "lowbirthweight")]))
+```
+
+# Summarizing Numerical Data
+
+## Numerical summaries
+
+**Question.** What values are typical, and how much do they vary?
+
+The mean and standard deviation describe centre and spread using all observed values. The median and interquartile range (IQR), the distance between the 25th and 75th percentiles, are less sensitive to extremes. Neither pair requires normally distributed data simply to be calculated (Pearson, 2018, Sections 3.2.1-3.2.3).
+
+```{r}
+# Summarise the numerical measurements using their observed values
+numerical <- c("fage", "mage", "weeks", "visits", "gainedKG", "weightKG")
+statistics <- data.frame(
+  observed = sapply(data[numerical], function(values) length(na.omit(values))),
+  mean = sapply(data[numerical], mean, na.rm = TRUE),
+  median = sapply(data[numerical], median, na.rm = TRUE),
+  sd = sapply(data[numerical], sd, na.rm = TRUE),
+  iqr = sapply(data[numerical], IQR, na.rm = TRUE)
+)
+statistics
+
+```
+Mean birth weight is `r round(mean(data$weightKG), 2)` kg, compared with a median of `r round(median(data$weightKG), 2)` kg. 
+
+```{r}
+# Locate the quartiles and extremes of birth weight
+quantile(data$weightKG)
+```
+
+## Distribution shape
+
+A histogram groups observations into intervals. A density curve smooths the observed distribution. Its height is a density, and the area under the curve represents probability. The following histogram uses a density scale so the two displays can be compared (Pearson, 2018, Section 3.2.5).
+
+```{r}
+# Compare the birth-weight distribution with its measures of centre
+hist(data$weightKG, probability = TRUE, main = "",
+     xlab = "Birth weight (kg)", ylab = "Density (1/kg)")
+lines(density(data$weightKG), col = "steelblue", lwd = 2)
+abline(v = mean(data$weightKG), col = "darkorange", lwd = 2, lty = 2)
+abline(v = median(data$weightKG), col = "darkgreen", lwd = 2, lty = 3)
+legend("topleft", legend = c("Density", "Mean", "Median"),
+       col = c("steelblue", "darkorange", "darkgreen"), lty = c(1, 2, 3),
+       lwd = 2, bty = "n")
+```
+
+**Interpretation.** The middle 50% of birth weights lies between `r round(quantile(data$weightKG, 0.25), 2)` and `r round(quantile(data$weightKG, 0.75), 2)` kg, with a longer tail towards smaller values. The mean and median alone conceal that tail, which needs investigation before making a distributional assumption.
+
+## Gaussian assumption
+
+A normal Q-Q plot compares ordered observations with theoretical normal quantiles. Approximate alignment with a straight line supports a normal approximation; systematic curvature and tail departures indicate differences. The reference line passes through the sample quartiles. It is not a confidence band or a pass/fail threshold (Pearson, 2018, Sections 3.2.4-3.2.5).
+
+```{r}
+# Assess the shape of birth weight against a normal reference
+qqnorm(data$weightKG, main = "", ylab = "Observed birth weight (kg)")
+qqline(data$weightKG)
+```
+
+**Interpretation.** The lower tail departs below the line, showing more extreme low weights than the reference suggests. 
+
+# Anomalies in Numerical Data
+
+## Outlier detection
+
+**Question.** Which weights are unusually distant from the centre, and what do their other recorded values show?
+
+Use the established 1.5-IQR rule as a screening tool. The lower fence is $Q_1 - 1.5\,IQR$ and the upper fence is $Q_3 + 1.5\,IQR$. A flag identifies an observation for investigation; it does not establish a recording error. Pearson (2018, Sections 3.3.1-3.3.2) emphasises that genuine subgroups can produce outliers and that every detection rule has limitations.
+
+```{r}
+# Calculate the birth-weight screening fences
+quartiles <- quantile(data$weightKG, c(0.25, 0.75), names = FALSE)
+fences <- c(lower = quartiles[1] - 1.5 * IQR(data$weightKG),
+            upper = quartiles[2] + 1.5 * IQR(data$weightKG))
+fences
+
+```
+
+```{r}
+# Inspect flagged weights with their pregnancy durations and classifications
+flags <- data$weightKG < fences["lower"] | data$weightKG > fences["upper"]
+data[flags, c("record", "weightKG", "weeks", "premie")]
+
+```
+
+```{r}
+# Locate the flagged observations in the source records
+plot(data$record, data$weightKG, pch = 16, cex = 0.6,
+     col = ifelse(flags, "darkorange", "grey60"), main = "",
+     xlab = "Source record", ylab = "Birth weight (kg)")
+abline(h = fences, lty = 2, col = "steelblue", lwd = 2)
+```
+
+**Interpretation.** The rule flags `r sum(flags)` weights. Many are in the lower tail, so we examine their pregnancy durations rather than treating distance from the centre as grounds for removal.
+
+```{r}
+# Compare outlier flags with the released prematurity categories
+table(flagged = flags, prematurity = data$premie)
+```
+
+Of the flagged records, `r sum(flags & data$premie == "premie")` are classified as premature. This connection supplies context for the low weights. No correction or exclusion follows from the screening rule alone.
+
+## Outlier influence
+
+Measure how much the flagged observations affect the summaries, all expressed in kilograms. The second row below is a sensitivity comparison restricted to weights inside the fences; it does not replace the full dataset or define a preferred sample.
+
+```{r}
+# Compare full-sample summaries with a sensitivity calculation inside the fences
+sensitivity <- data.frame(
+  selection = c("All records", "Inside fences: sensitivity only"),
+  records = c(nrow(data), sum(!flags)),
+  mean = c(mean(data$weightKG), mean(data$weightKG[!flags])),
+  median = c(median(data$weightKG), median(data$weightKG[!flags])),
+  sd = c(sd(data$weightKG), sd(data$weightKG[!flags])),
+  iqr = c(IQR(data$weightKG), IQR(data$weightKG[!flags]))
+)
+sensitivity
+
+```
+
+The standard deviation changes proportionally more than the IQR, and the mean changes more than the median. This illustrates resistance. The comparison also shows why deleting flagged observations would change the distribution we are trying to describe.
+
+## Inlier inspection
+
+Pearson (2018, Section 3.3.3) uses *inlier* for erroneous values within the ordinary range, and unusually frequent repetitions as a clue worth investigating. Such errors can escape an outlier rule. Repeated values can also arise naturally from counts or recorded precision.
+
+```{r}
+# Inspect repeated values of recorded maternal weight gain
+frequency <- table(data$gainedKG)
+sort(frequency, decreasing = TRUE)
+
+```
+
+```{r}
+# Display concentrations at repeated maternal weight gains
+plot(as.numeric(names(frequency)), as.numeric(frequency), 
+     type = "h", lwd = 2,
+     col = "steelblue",
+     xlab = "Recorded maternal weight gain (kg)", 
+     ylab = "Number of records")
+```
+
+**Interpretation.** The most frequent value is `r round(as.numeric(names(which.max(frequency))), 2)` kg, appearing `r max(frequency)` times. Maternal weight gain was originally recorded in whole pounds, so repetitions are expected. The decimal kilogram values reflect conversion and do not imply greater measurement precision. Frequency alone does not establish an erroneous default value or justify changing it.
+
+## Metadata review
+
+Variable definitions and units are part of the evidence. Inspect the largest recorded pregnancy durations alongside the other fields before proposing a correction (Pearson, 2018, Section 3.3.4).
+
+```{r}
+# Inspect the five largest recorded pregnancy durations
+data[order(data$weeks, decreasing = TRUE)[1:5],
+     c("record", "weeks", "weightKG", "premie")]
+```
+
+These are review findings. The available documentation supplies no record-specific replacements, so the recorded values remain unchanged. We also retain the released `premie`, `mature`, and `lowbirthweight` categories: the short data description does not fully document their derivation, including possible effects of rounding.
+
+## Disguised missingness
+
+An `NA` check cannot detect a missing value stored as a valid-looking number. Zero can mean either an observed absence or a placeholder, depending on the recording rules. Investigate the documentation before recoding it (Pearson, 2018, Section 3.3.5).
+
+```{r}
+# Inspect records with zero visits or zero recorded weight gain
+subset(data, visits == 0 | gainedKG == 0,
+       select = c(record, visits, gainedKG, weeks, weightKG))
+```
+
+There are `r sum(data$visits == 0, na.rm = TRUE)` recorded zeros for visits and `r sum(data$gainedKG == 0, na.rm = TRUE)` for weight gain. The supplied metadata does not identify these zeros as missing-value codes. Keep them as recorded, and leave their interpretation unresolved where documentation is insufficient.
+
+**Question:** Should the flagged weights, repeated weight gains, or zeros be automatically changed to `NA`?
+
+**Answer:** No. These checks identify different questions for source review. A confirmed recording error needs evidence for its correction; an unusual or repeated observation can be valid. All original values remain in `data`.
+
+# Visualization Relationship Between Variables
+
+## Numerical relationships
+
+**Question.** How does birth weight vary with pregnancy duration?
+
+A scatterplot displays direction, shape, spread, and unusual combinations of two numerical variables. Transparency makes overlapping points easier to see. The orange curve is a local smoother that helps reveal curvature without imposing a straight line (Pearson, 2018, Section 3.4.1).
+
+```{r}
+# Explore the shape of the weight-duration relationship
+plot(data$weeks,
+     data$weightKG, pch = 16, cex = 0.7,
+     col = adjustcolor("steelblue", alpha.f = 0.3),
+     xlab = "Pregnancy duration (weeks)", 
+     ylab = "Birth weight (kg)")
+lines(lowess(data$weeks, data$weightKG), col = "darkorange", lwd = 2)
+```
+
+**Interpretation.** Birth weight generally increases with pregnancy duration, but the relationship is not a straight line across the full range. The sparse extremes and changing vertical spread need attention when we later examine a linear model.
+
+```{r}
+# Summarise the linear association between duration and birth weight
+cor(data$weeks, data$weightKG)
+```
+
+Pearson's correlation is `r round(cor(data$weeks, data$weightKG), 2)`. It summarises linear association and does not describe the curvature, establish causation, or measure predictive performance on new records.
+
+## Grouped distributions
+
+**Question.** How do birth-weight distributions compare across recorded smoking groups?
+
+Only records with observed smoking status can enter this comparison. Birth weight and its classification are complete. Identify the omitted source rows once, and reuse the same eligibility rule for the categorical comparison and subsequent test.
+
+```{r}
+# Record the rows omitted from comparisons requiring smoking status
+eligible <- !is.na(data$habit)
+omissions <- data.frame(record = data$record[!eligible],
+                        reason = "Smoking status missing")
+omissions
+```
+
+The starting dataset has `r nrow(data)` records. The smoking comparisons omit `r nrow(omissions)` and retain `r sum(eligible)`: `r sum(data$habit %in% "nonsmoker")` nonsmoker records and `r sum(data$habit %in% "smoker")` smoker records. Other analyses continue to use the full dataset. The missingness mechanism remains unknown.
+
+```{r}
+# Compare birth-weight distributions by recorded smoking status
+boxplot(weightKG ~ habit, data = data, subset = eligible,
+        names = c("Nonsmoker", "Smoker"), col = c("lightblue", "wheat"),
+        main = "", xlab = "Maternal smoking status", ylab = "Birth weight (kg)")
+```
+
+**Interpretation.** Median weight is `r round(median(data$weightKG[data$habit %in% "nonsmoker"]), 2)` kg in the nonsmoker group and `r round(median(data$weightKG[data$habit %in% "smoker"]), 2)` kg in the smoker group, with substantial overlap. This unadjusted comparison does not separate smoking status from other differences between the groups (Pearson, 2018, Section 3.4.2).
+
+## Categorical relationships
+
+**Question.** Does the proportion classified as low birth weight differ between smoking groups?
+
+Use counts to establish denominators, then calculate percentages within each smoking group. These percentages make the comparison interpretable despite unequal group sizes.
+
+```{r}
+# Cross-tabulate smoking status and the released birth-weight classification
+counts <- table(data$habit[eligible], data$lowbirthweight[eligible])
+counts
+```
+
+```{r}
+# Calculate birth-weight percentages within each smoking group
+proportions <- prop.table(counts, margin = 1)
+100 * proportions
+```
+
+In the mosaic plot, column widths reflect smoking-group sizes, vertical subdivisions show within-group proportions, and tile areas represent joint counts.
+
+```{r}
+# Display the categorical relationship as a mosaic plot
+mosaicplot(counts, color = c("lightblue", "darkorange"), main = "",
+           xlab = "Maternal smoking status", ylab = "Birth-weight classification")
+```
+
+**Interpretation.** Low birth weight accounts for `r round(100 * proportions["smoker", "low"], 1)`% of recorded smoker births and `r round(100 * proportions["nonsmoker", "low"], 1)`% of recorded nonsmoker births. The mosaic plot shows both this difference and the imbalance in group sizes (Pearson, 2018, Section 3.4.3).
+
+**Question:** Which smoking group contains more low-birth-weight records, and which has the larger within-group percentage?
+
+**Answer.** The nonsmoker group has more such records (`r counts["nonsmoker", "low"]` versus `r counts["smoker", "low"]`) because it is much larger. The smoker group has the larger percentage. Comparing counts alone would obscure this distinction.
+
+## Data dictionary
+
+The dictionary records the final variables, their units or categories, and missingness, following Pearson's exploration sequence (2018, Section 3.1). Labels for released classifications retain their source meaning; no new thresholds are inferred.
+
+```{r}
+# Document the final variables and their recorded missingness
+descriptions <- c(
+  record = "Original CSV row",
+  fage = "Father's age", mage = "Mother's age",
+  mature = "Released maternal age category", weeks = "Pregnancy duration",
+  premie = "Released prematurity category", visits = "Hospital visits during pregnancy",
+  gainedKG = "Maternal weight gain converted to kilograms for analysis",
+  gained = "Source maternal weight gain in pounds",
+  weightKG = "Birth weight converted to kilograms for analysis",
+  weight = "Source birth weight in pounds",
+  lowbirthweight = "Released birth-weight category", sex = "Recorded sex",
+  habit = "Recorded maternal smoking status", marital = "Recorded maternal marital status",
+  whitemom = "Released maternal white/not white category"
+)
+units <- c(
+  record = "identifier", fage = "years", mage = "years", mature = "category",
+  weeks = "weeks", premie = "category", visits = "count",
+  gainedKG = "kg", gained = "lb", weightKG = "kg", weight = "lb",
+  lowbirthweight = "category", sex = "category", habit = "category",
+  marital = "category", whitemom = "category"
+)
+dictionary <- data.frame(
+  variable = names(data),
+  description = descriptions[names(data)],
+  units = units[names(data)],
+  type = sapply(data, class),
+  levels = sapply(data, function(values) paste(levels(values), collapse = "; ")),
+  missing = colSums(is.na(data)),
+  row.names = NULL
+)
+dictionary
+```
+
+The EDA establishes a lower birth-weight tail, a curved relationship with duration, and different low-birth-weight proportions across recorded smoking groups. It also identifies missing smoking status and extreme durations that need source review. These findings determine the denominators and interpretation of the following brief inferential examples.
+
+# Parameter Uncertainty
+
+**Question:** How precisely does the sample estimate mean birth weight in the source population?
+
+The parameter of interest is the population mean birth weight, written as $\mu$. Its estimate is the sample mean, $\bar{x}$. A confidence interval expresses uncertainty about this population mean using the sample.
+
+## Method choice
+
+We select the **one-sample Student's t procedure** because the outcome is numerical birth weight, the question concerns the mean of one population, and the population standard deviation is unknown. We estimate that standard deviation from the sample. Here, we use the procedure to calculate a confidence interval for the mean.
+
+**Why use it when the birth weights are not normally distributed?** The relevant distribution is the sampling distribution of the **mean** across repeated samples. For a large sample of independent observations with finite variance, this distribution is approximately normal, even when individual values are skewed. This is the central limit theorem. The documented random sample of 1,000 births supports this approximation; we treat births as independent sampling units. The earlier EDA remains important because extreme values can influence the mean and its interval.
+
+## Calculation
+
+Calculate the standard error $SE = s/\sqrt{n}$, then the 95% confidence interval $\bar{x} \pm t_{0.975,n-1}SE$.
+
+| Symbol | R column | Meaning |
+|:--|:--|:--|
+| $n$ | `records` | Number of observed birth weights |
+| $\bar{x}$ | `mean` | Sample mean birth weight, in kg |
+| $s$ | `sd` | Sample standard deviation: variation among individual birth weights, in kg |
+| $SE$ | `se` | Standard error: estimated standard deviation of the sample mean across repeated samples of size $n$, in kg |
+
+The multiplier $t_{0.975,n-1}$ comes from the Student's $t$ distribution, used because the population standard deviation is estimated from the sample. **Degrees of freedom** count the independent pieces of information used to estimate spread: here, $n-1$ after estimating one mean. The value 0.975 selects the upper cutoff for a central 95% interval, leaving 2.5% in each tail.
+
+**What does the t-test test?** A one-sample t-test compares the population mean $\mu$ with a specified reference mean $\mu_0$, in kilograms. Its null hypothesis is $H_0: \mu = \mu_0$; the two-sided alternative is $H_A: \mu \ne \mu_0$. It calculates
+
+$$
+t = \frac{\bar{x} - \mu_0}{SE},
+$$
+
+which measures the difference from the reference in standard-error units. This calculated statistic differs from the reference cutoff $t_{0.975,n-1}$ used above. Under $H_0$, comparison with the $t$ distribution gives a p-value: the probability of a statistic at least as far from zero in either direction. This reference distribution is exact for independent, normally distributed observations and approximate for this large sample.
+
+**How is it used here?** With one numeric vector, `t.test()` performs a one-sample test and returns a confidence interval. Its default reference is `mu = 0` and its default alternative is `"two.sided"`. Zero birth weight is not a reference specified by our research question, so we do not interpret that default hypothesis test. We request 95% confidence with `conf.level = 0.95` and extract only the interval with `$conf.int`. The two-sided interval estimates the population mean and does not depend on the reference value `mu`.
+
+```{r}
+# Estimate mean birth weight and its 95 percent confidence interval
+interval <- data.frame(records = length(data$weightKG), mean = mean(data$weightKG),
+                       sd = sd(data$weightKG))
+interval$se <- interval$sd / sqrt(interval$records)
+limits <- t.test(data$weightKG, conf.level = 0.95)$conf.int
+interval$lowerCI <- limits[1]
+interval$upperCI <- limits[2]
+interval
+```
+
+`limits[1]` and `limits[2]` are the lower and upper endpoints. They become `lowerCI` and `upperCI` in the table; **CI** means confidence interval. Both endpoints are in kilograms.
+
+**Interpretation.** Estimated mean birth weight is `r round(interval$mean, 2)` kg, with a 95% confidence interval from `r round(interval$lowerCI, 2)` to `r round(interval$upperCI, 2)` kg. Under repeated sampling with the same design and procedure, approximately 95% of such intervals would cover the population mean. This interval concerns the mean, not the range containing 95% of individual births, and does not account for recording errors.
+
+# Hypothesis Testing
+
+**Question:** Is recorded smoking status associated with low-birth-weight classification?
+
+We will compare two statements about the source population:
+
+- **Null hypothesis, $H_0$:** smoking status and birth-weight classification are independent; the low-birth-weight proportion is the same in both smoking groups.
+- **Alternative hypothesis, $H_A$:** the classifications are associated; those proportions differ.
+
+The **significance level**, $\alpha = 0.05$, is the decision threshold: a p-value below 0.05 leads us to reject $H_0$. Because this relationship has already been explored, the test provides exploratory evidence rather than independent confirmation.
+
+The earlier `counts` table contains observed frequencies for two smoking groups and two birth-weight categories. `chisq.test()` compares them with the frequencies expected under independence, preserving the row and column totals. `test$expected` displays these expected counts, which may be decimals because they are calculated reference values.
+
+```{r}
+# Inspect the expected counts from the chi-squared calculation
+test <- chisq.test(counts, correct = TRUE)
+test$expected
+```
+
+Every expected count exceeds five, supporting the chi-squared approximation. `correct = TRUE` applies R's default Yates continuity correction: an adjustment for approximating discrete counts with a continuous chi-squared distribution in a 2-by-2 table. The calculation treats birth records as independent sampling units and uses the `r sum(counts)` complete records defined earlier. Missing smoking status limits extension to all source births.
+
+```{r}
+# Display the association test after checking its expected counts
+test
+```
+
+Read the output as follows:
+
+| Output | Meaning |
+|:--|:--|
+| `X-squared` | Test statistic summarising the discrepancy between observed and expected counts; larger values indicate greater departure from independence |
+| `df` | Degrees of freedom: $(\text{rows}-1)(\text{columns}-1)$, equal to 1 for this 2-by-2 table |
+| `p-value` | Assuming $H_0$ and the test conditions hold, the probability of a test statistic at least as large as the observed one; it is not the probability that $H_0$ is true |
+
+**Interpretation.** The p-value is `r format.pval(test$p.value, digits = 3, eps = 0.001)`, providing evidence against independence under the test's conditions. The direction and size of the observed difference are given by the percentages above. The test does not establish that smoking caused the difference or resolve possible bias from missing smoking status.
+
+# Linear Regression
+
+**Question:** How well does one straight line summarise birth weight against pregnancy duration?
+
+Describing the relationship using $weightKG_i = \beta_0 + \beta_1 weeks_i + \varepsilon_i$. The subscript $i$ identifies one birth. Birth weight is the **outcome**, and pregnancy duration is the **explanatory variable**.
+
+| Term | Meaning | R output |
+|:--|:--|:--|
+| $\beta_0$ | Intercept: the mean birth weight on the modelled line at zero weeks, in kg | Estimated as `(Intercept)` |
+| $\beta_1$ | Slope: the change in mean birth weight on that line for one additional week, in kg per week | Estimated as `weeks` |
+| $\varepsilon_i$ | Error: birth $i$'s unexplained deviation from the population line, in kg; this does not imply a recording mistake | Estimated by a residual after fitting |
+
+In `lm()`, the formula `weightKG ~ weeks` places the outcome on the left and explanatory variable on the right. `data = data` identifies the table containing them. Both columns are complete, so all records enter the fit.
+
+```{r}
+# Fit a straight line relating birth weight to pregnancy duration
+model <- lm(weightKG ~ weeks, data = data)
+model
+```
+
+Under `Coefficients`, `model` prints the estimated intercept and slope. Together they define the **fitted value**, the weight on the fitted line at a given duration. A **residual** is observed weight minus fitted weight. `lm()` uses least squares: it chooses the line that minimises the sum of squared residuals. `abline(model)` adds that line to the scatterplot.
+
+```{r}
+# Compare the fitted line with the observed relationship
+plot(data$weeks, data$weightKG, pch = 16, cex = 0.6,
+     col = adjustcolor("steelblue", alpha.f = 0.3), main = "",
+     xlab = "Pregnancy duration (weeks)", ylab = "Birth weight (kg)")
+abline(model, col = "darkorange", lwd = 2)
+```
+
+**Interpretation.** The fitted slope is `r round(coef(model)["weeks"], 2)` kg per week. The intercept refers to zero weeks, outside the observed range, and has no useful substantive interpretation here. The slope is a description of this fit, not a causal effect.
+
+The expression `coef(model)["weeks"]` selects the slope estimate by its output name.
+
+The left diagnostic panel plots residuals against fitted weights, both in kilograms. Look for residuals scattered around zero without curvature or changing spread. The right panel is a normal Q-Q plot of **standardised residuals**: each residual divided by its estimated standard deviation, giving a unitless scale. Points close to the reference line support a normal-error approximation.
+
+`which = c(1, 2)` selects these two diagnostics. Empty `caption` and `sub.caption` arguments remove automatic text; `id.n = 0` omits point labels while retaining all observations.
+
+```{r, fig.width=8, fig.height=4}
+# Examine the residual pattern and its normal approximation
+layout <- par(mfrow = c(1, 2)) # Arrange one row and two columns
+plot(model, which = c(1, 2), caption = "", sub.caption = "", id.n = 0)
+par(layout) # Restore the previous plotting layout
+```
+
+Usual model-based intervals and tests also require independent errors, constant error variance (similar spread across fitted values), and an adequate normal-error approximation. These plots assess patterns and spread; independence depends on the study design.
+
+**Interpretation.** Curvature and changing residual spread indicate that the straight line misses structure. Tail departures add reasons for caution about normal-error inference. Treat this as a provisional descriptive model; the diagnostics do not support presenting it as a validated prediction model or relying on its usual inferential output.
+
+# References
+
+- Pearson, R. K. (2018). *Exploratory Data Analysis Using R*. CRC Press. Supplied chapters: **Data, Exploratory Analysis, and R** (Chapter 1), **Graphics in R** (Chapter 2), and **Exploratory Data Analysis: A First Look** (Chapter 3).
+- OpenIntro. [US births: births14 documentation](https://openintrostat.github.io/openintro/reference/births14.html) and [CSV data](https://www.openintro.org/data/csv/births14.csv).
+- US Department of Health and Human Services, Centers for Disease Control and Prevention, National Center for Health Statistics. *Natality Detail File, 2014 United States*. ICPSR, 2016. [Source archive](https://doi.org/10.3886/ICPSR36461.v1), as cited by OpenIntro.
+- R Core Team. R documentation for [chi-squared tests](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/chisq.test.html), [Q-Q plots](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/qqnorm.html), and [linear-model diagnostics](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/plot.lm.html).
